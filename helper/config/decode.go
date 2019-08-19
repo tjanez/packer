@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/hashicorp/go-multierror"
+	"github.com/hashicorp/packer/common/trilean"
 	"github.com/hashicorp/packer/template/interpolate"
 	"github.com/mitchellh/mapstructure"
 )
@@ -29,6 +30,7 @@ type DecodeOpts struct {
 
 var DefaultDecodeHookFuncs = []mapstructure.DecodeHookFunc{
 	uint8ToStringHook,
+	stringToTrilean,
 	mapstructure.StringToSliceHookFunc(","),
 	mapstructure.StringToTimeDurationHookFunc(),
 }
@@ -152,5 +154,32 @@ func uint8ToStringHook(f reflect.Kind, t reflect.Kind, v interface{}) (interface
 		}
 	}
 
+	return v, nil
+}
+
+func stringToTrilean(f reflect.Type, t reflect.Type, v interface{}) (interface{}, error) {
+	// We have a custom data type, trilean, which we read from a string and
+	// then cast to a *bool. Why? So that we can appropriately read "unset"
+	// *bool values in order to intelligently default, even when the values are
+	// being set by a template variable.
+
+	testTril, _ := trilean.FromString("")
+	if t == reflect.TypeOf(testTril) {
+		// From value is string
+		if f == reflect.TypeOf("") {
+			tril, err := trilean.FromString(v.(string))
+			if err != nil {
+				return v, fmt.Errorf("Error parsing bool from given var: %s", err)
+			}
+			return tril, nil
+		} else {
+			// From value is boolean
+			if f == reflect.TypeOf(true) {
+				tril := trilean.FromBool(v.(bool))
+				return tril, nil
+			}
+		}
+
+	}
 	return v, nil
 }
